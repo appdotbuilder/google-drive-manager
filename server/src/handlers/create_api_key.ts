@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { apiKeysTable } from '../db/schema';
 import { type UserContext } from '../schema';
+import crypto from 'crypto';
 
 export interface CreateApiKeyInput {
     keyName: string;
@@ -11,15 +14,31 @@ export interface CreateApiKeyResponse {
 }
 
 export async function createApiKey(input: CreateApiKeyInput, userContext: UserContext): Promise<CreateApiKeyResponse> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Generate a secure random API key
-    // 2. Store API key in database linked to user
-    // 3. Return the API key (only shown once for security)
-    // This allows users to generate keys for programmatic access
-    return {
-        apiKey: 'gd_placeholder_api_key_' + Math.random().toString(36).substring(7),
-        keyName: input.keyName,
-        createdAt: new Date()
-    };
+    try {
+        // Generate a secure random API key with prefix
+        const randomBytes = crypto.randomBytes(32);
+        const apiKey = `gd_${randomBytes.toString('hex')}`;
+
+        // Insert API key record into database
+        const result = await db.insert(apiKeysTable)
+            .values({
+                user_id: userContext.userId,
+                key_name: input.keyName,
+                api_key: apiKey,
+                is_active: true
+            })
+            .returning()
+            .execute();
+
+        const createdApiKey = result[0];
+
+        return {
+            apiKey: createdApiKey.api_key,
+            keyName: createdApiKey.key_name,
+            createdAt: createdApiKey.created_at
+        };
+    } catch (error) {
+        console.error('API key creation failed:', error);
+        throw error;
+    }
 }
